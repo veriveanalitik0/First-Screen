@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KuveytTürk · Kiosk Kontrol</title>
+<style>
+  :root{
+    --bg:#061A12; --bg2:#04130D; --card:#0C2419; --card2:#0f2b1e;
+    --green:#27B368; --green-br:#3AD681; --ink:#EAF4EE; --muted:#9DC1AE;
+    --line:rgba(157,193,174,.16); --line2:rgba(58,214,129,.35);
+    --danger:#E0663C;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(39,179,104,.14), transparent 60%),
+      linear-gradient(180deg,var(--bg),var(--bg2));
+    color:var(--ink); min-height:100vh;
+    padding:max(18px,env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{ max-width:520px; margin:0 auto; }
+  header{ text-align:center; margin:6px 0 18px; }
+  .eyebrow{ font-size:12px; letter-spacing:.32em; text-transform:uppercase; color:var(--green-br); font-weight:700; }
+  h1{ font-size:22px; margin:6px 0 2px; letter-spacing:-.01em; }
+  h1 b{ color:var(--green-br); }
+  .sync{ font-size:12.5px; color:var(--muted); margin-top:8px; min-height:16px; transition:color .2s; }
+  .sync.ok{ color:var(--green-br); }
+  .sync.err{ color:var(--danger); }
+
+  .card{
+    background:linear-gradient(180deg,var(--card),var(--card2));
+    border:1px solid var(--line); border-radius:16px;
+    padding:16px 16px 18px; margin:12px 0;
+    box-shadow:0 10px 30px -18px rgba(0,0,0,.7);
+  }
+  .row{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .label{ font-size:15px; font-weight:600; }
+  .val{ font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:15px; color:var(--green-br); font-weight:600; }
+  .hint{ font-size:12.5px; color:var(--muted); margin-top:2px; }
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:36px; margin:8px 0 0; background:transparent; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{ height:6px; border-radius:99px; background:linear-gradient(90deg,var(--green),var(--green-br)); }
+  input[type=range]::-moz-range-track{ height:6px; border-radius:99px; background:linear-gradient(90deg,var(--green),var(--green-br)); }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:26px; height:26px; margin-top:-10px; border-radius:50%; background:#eafff3; border:3px solid var(--green-br); box-shadow:0 3px 10px rgba(0,0,0,.4); }
+  input[type=range]::-moz-range-thumb{ width:22px; height:22px; border-radius:50%; background:#eafff3; border:3px solid var(--green-br); box-shadow:0 3px 10px rgba(0,0,0,.4); }
+
+  .toggles{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button.tg{
+    width:100%; border:1px solid var(--line2); background:rgba(39,179,104,.08);
+    color:var(--ink); font-size:15px; font-weight:600; padding:16px 12px; border-radius:14px; cursor:pointer;
+    transition:transform .05s, background .15s, border-color .15s;
+  }
+  button.tg:active{ transform:scale(.98); }
+  button.tg .st{ display:block; font-size:12.5px; color:var(--muted); font-weight:500; margin-top:3px; }
+  button.tg.on{ background:linear-gradient(180deg,rgba(58,214,129,.24),rgba(39,179,104,.12)); border-color:var(--green-br); }
+  button.tg.on .st{ color:var(--green-br); }
+
+  .reset{
+    width:100%; margin-top:6px; border:1px solid var(--line); background:transparent;
+    color:var(--muted); font-size:14px; padding:14px; border-radius:14px; cursor:pointer;
+  }
+  .reset:active{ transform:scale(.99); }
+  footer{ text-align:center; font-size:12px; color:var(--muted); margin-top:18px; line-height:1.5; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="eyebrow">Kiosk Kontrol</div>
+      <h1><b>KuveytTürk</b> · Yapay Zeka Laboratuvarı</h1>
+      <div class="sync" id="sync">Bağlanıyor…</div>
+    </header>
+
+    <div class="card">
+      <div class="toggles">
+        <button class="tg" id="btnPause"><span id="pauseLbl">Döndür</span><span class="st" id="pauseSt">dönüyor</span></button>
+        <button class="tg" id="btnDir"><span>Yön</span><span class="st" id="dirSt">saat yönü</span></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row"><span class="label">Dönüş hızı</span><span class="val" id="spdVal">48 sn/tur</span></div>
+      <input type="range" id="spd" min="6" max="180" step="1" value="48">
+      <div class="hint">Sola kaydır = daha hızlı, sağa = daha yavaş (bir tam turun süresi).</div>
+    </div>
+
+    <div class="card">
+      <div class="row"><span class="label">Model boyutu</span><span class="val" id="zoomVal">%100</span></div>
+      <input type="range" id="zoom" min="0.6" max="1.8" step="0.01" value="1">
+      <div class="hint">Maketin çerçeveyi ne kadar doldurduğu.</div>
+    </div>
+
+    <div class="card">
+      <div class="row"><span class="label">Kamera açısı</span><span class="val" id="phiVal">0.95</span></div>
+      <input type="range" id="phi" min="0.15" max="1.45" step="0.01" value="0.95">
+      <div class="hint">Küçük = tepeden (kuşbakışı), büyük = daha yandan bakış.</div>
+    </div>
+
+    <div class="card">
+      <div class="row"><span class="label">Dikey konum</span><span class="val" id="tyVal">110</span></div>
+      <input type="range" id="ty" min="-200" max="400" step="5" value="110">
+      <div class="hint">Maketi çerçevede yukarı/aşağı kaydırır.</div>
+    </div>
+
+    <button class="reset" id="btnReset">Varsayılan ayarlara döndür</button>
+
+    <footer>
+      Değişiklikler ekrana ~2 saniye içinde yansır.<br>
+      Yeniden başlatma gerekmez; ayarlar kayıtlı kalır.
+    </footer>
+  </div>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var sync = $('sync');
+  var dragging = false;         // slider sürüklenirken dış güncellemeyi durdur
+  var state = null;
+
+  function setSync(msg, cls){
+    sync.textContent = msg;
+    sync.className = 'sync' + (cls ? ' ' + cls : '');
+  }
+  function fmtTime(){
+    var d = new Date();
+    return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2);
+  }
+
+  // --- sunucu ile konuşma ---
+  function getState(){
+    return fetch('/api/state', {cache:'no-store'})
+      .then(function(r){ return r.json(); });
+  }
+  function patch(obj){
+    return fetch('/api/state', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(obj)
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(s){ state = s; setSync('Kaydedildi · '+fmtTime(), 'ok'); return s; })
+    .catch(function(){ setSync('Sunucuya ulaşılamadı', 'err'); });
+  }
+
+  // throttle: sürükleme sırasında saniyede birkaç istek yeter
+  function throttle(fn, ms){
+    var t = 0, pending = null;
+    return function(v){
+      pending = v;
+      var nowT = Date.now();
+      if(nowT - t >= ms){ t = nowT; fn(pending); pending = null; }
+      else{
+        clearTimeout(throttle._h);
+        throttle._h = setTimeout(function(){ t = Date.now(); if(pending!==null){ fn(pending); pending=null; } }, ms);
+      }
+    };
+  }
+  var sendSpd  = throttle(function(v){ patch({secPerTurn:v}); }, 150);
+  var sendZoom = throttle(function(v){ patch({zoom:v}); }, 150);
+  var sendPhi  = throttle(function(v){ patch({phi:v}); }, 150);
+  var sendTy   = throttle(function(v){ patch({targetY:v}); }, 150);
+
+  // --- görsel güncelleme ---
+  function renderReadouts(){
+    $('spdVal').textContent  = $('spd').value + ' sn/tur';
+    $('zoomVal').textContent = '%' + Math.round(parseFloat($('zoom').value)*100);
+    $('phiVal').textContent  = parseFloat($('phi').value).toFixed(2);
+    $('tyVal').textContent   = $('ty').value;
+  }
+  function applyToUI(s){
+    if(!s) return;
+    if(!dragging){
+      $('spd').value  = s.secPerTurn;
+      $('zoom').value = s.zoom;
+      $('phi').value  = s.phi;
+      $('ty').value   = s.targetY;
+    }
+    // toggle durumları her zaman güncellenebilir
+    var pb = $('btnPause');
+    pb.classList.toggle('on', !s.paused);
+    $('pauseLbl').textContent = s.paused ? 'Duraklat' : 'Döndür';
+    $('pauseSt').textContent  = s.paused ? 'durakladı' : 'dönüyor';
+    var db = $('btnDir');
+    var cw = (s.direction === -1);            // -1 = saat yönü (görsel tercih)
+    db.classList.toggle('on', true);
+    $('dirSt').textContent = cw ? 'saat yönü' : 'ters yön';
+    renderReadouts();
+  }
+
+  // --- olaylar ---
+  function bindSlider(el, sender){
+    el.addEventListener('pointerdown', function(){ dragging = true; });
+    el.addEventListener('input', function(){ renderReadouts(); sender(parseFloat(el.value)); });
+    var done = function(){ dragging = false; sender(parseFloat(el.value)); };
+    el.addEventListener('change', done);
+    el.addEventListener('pointerup', done);
+    el.addEventListener('pointercancel', function(){ dragging = false; });
+  }
+  bindSlider($('spd'),  sendSpd);
+  bindSlider($('zoom'), sendZoom);
+  bindSlider($('phi'),  sendPhi);
+  bindSlider($('ty'),   sendTy);
+
+  $('btnPause').addEventListener('click', function(){
+    var np = state ? !state.paused : false;
+    patch({paused: np});
+  });
+  $('btnDir').addEventListener('click', function(){
+    var nd = (state && state.direction === -1) ? 1 : -1;
+    patch({direction: nd});
+  });
+  $('btnReset').addEventListener('click', function(){
+    fetch('/api/reset', {method:'POST'})
+      .then(function(r){ return r.json(); })
+      .then(function(s){ state = s; applyToUI(s); setSync('Varsayılana döndü · '+fmtTime(), 'ok'); })
+      .catch(function(){ setSync('Sunucuya ulaşılamadı', 'err'); });
+  });
+
+  // --- başlangıç + hafif senkron (başka bir kontrolcü değiştirirse) ---
+  getState()
+    .then(function(s){ state = s; applyToUI(s); setSync('Bağlı · '+fmtTime(), 'ok'); })
+    .catch(function(){ setSync('Sunucuya ulaşılamadı', 'err'); });
+
+  setInterval(function(){
+    if(dragging) return;
+    getState().then(function(s){ state = s; applyToUI(s); }).catch(function(){});
+  }, 4000);
+})();
+</script>
+</body>
+</html>

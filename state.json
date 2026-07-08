@@ -1,0 +1,8 @@
+{
+  "secPerTurn": 48,
+  "direction": -1,
+  "paused": false,
+  "phi": 0.95,
+  "zoom": 1.0,
+  "targetY": 110
+}
