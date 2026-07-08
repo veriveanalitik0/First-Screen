@@ -3,7 +3,7 @@ services:
     build: .
     container_name: kuveyt-turk-kiosk
     ports:
-      - "8080:8080"          # TV: http://<sunucu-ip>:8080/  · Panel: /control
+      - "5353:5353"          # TV: http://<sunucu-ip>:5353/  · Panel: /control
     volumes:
       - kiosk-data:/data     # ayarlar burada kalıcı olur (yeniden başlatmada korunur)
     restart: unless-stopped

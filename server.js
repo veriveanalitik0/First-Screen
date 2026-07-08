@@ -18,7 +18,7 @@ const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 
-const PORT       = process.env.PORT || 8080;
+const PORT       = process.env.PORT || 5353;
 const ROOT       = __dirname;
 const STATE_FILE = process.env.STATE_FILE || path.join(ROOT, 'state.json');
 

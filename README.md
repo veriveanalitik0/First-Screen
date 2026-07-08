@@ -15,8 +15,8 @@ Klasörü sunucuya kopyalayın ve:
 ```bash
 docker compose up -d --build
 ```
-- **TV'de açın:**  `http://<SUNUCU-IP>:8080/`
-- **Kontrol paneli:**  `http://<SUNUCU-IP>:8080/control`
+- **TV'de açın:**  `http://<SUNUCU-IP>:5353/`
+- **Kontrol paneli:**  `http://<SUNUCU-IP>:5353/control`
 
 `<SUNUCU-IP>` = docker'ın çalıştığı makinenin yerel ağ IP'si
 (ör. Linux: `hostname -I`, macOS: `ipconfig getifaddr en0`).
@@ -24,7 +24,7 @@ docker compose up -d --build
 ### Düz Docker ile (compose olmadan)
 ```bash
 docker build -t kuveyt-kiosk .
-docker run -d --name kuveyt-kiosk -p 8080:8080 -v kiosk-data:/data --restart unless-stopped kuveyt-kiosk
+docker run -d --name kuveyt-kiosk -p 5353:5353 -v kiosk-data:/data --restart unless-stopped kuveyt-kiosk
 ```
 
 ## Uzaktan kontrol
@@ -47,8 +47,8 @@ yeniden başlasa bile son ayarlar korunur. "Varsayılana döndür" butonu sıfı
 ## Notlar
 - 3B görünüm ve yazı tipleri CDN'den yüklenir → ekranın **internet erişimi**
   olmalı (aynı ağda olması yeterli değilse, çıkış interneti de gerekir).
-- Portu değiştirmek için compose'daki `"8080:8080"` satırını
-  (ör. `"9000:8080"`) düzenleyin.
+- Portu değiştirmek için compose'daki `"5353:5353"` satırını
+  (ör. `"9000:5353"`) düzenleyin.
 - Sunucusuz hızlı deneme: `kiosk.html`'i tarayıcıda açabilirsiniz; ayarları
   URL'den de verebilirsiniz, ör.
   `kiosk.html?secPerTurn=30&zoom=1.2&phi=0.8`.
@@ -56,13 +56,13 @@ yeniden başlasa bile son ayarlar korunur. "Varsayılana döndür" butonu sıfı
 ## API (isteğe bağlı, otomasyon için)
 ```bash
 # mevcut ayarlar
-curl http://<IP>:8080/api/state
+curl http://<IP>:5353/api/state
 
 # hızı değiştir (yalnızca değiştirmek istediğiniz alanı gönderin)
-curl -X POST http://<IP>:8080/api/state \
+curl -X POST http://<IP>:5353/api/state \
   -H "Content-Type: application/json" \
   -d '{"secPerTurn": 30}'
 
 # varsayılana döndür
-curl -X POST http://<IP>:8080/api/reset
+curl -X POST http://<IP>:5353/api/reset
 ```
