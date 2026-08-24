@@ -1,0 +1,17 @@
+apiVersion: v2
+name: kiosk
+description: KuveytTürk Yapay Zeka Laboratuvarı — dikey kiosk (dönen 3B maket + uzaktan kontrol paneli)
+type: application
+# Chart sürümü — chart'ta yapılan her değişiklikte artırılır.
+version: 1.0.0
+# Paketlenen uygulama sürümü (image tag varsayılanı buradan gelir).
+appVersion: "1.0.0"
+keywords:
+  - kiosk
+  - signage
+  - nodejs
+home: https://github.com/veriveanalitik0/first-screen
+sources:
+  - https://github.com/veriveanalitik0/first-screen
+maintainers:
+  - name: KuveytTürk AI Lab

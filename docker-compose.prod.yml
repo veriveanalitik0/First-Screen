@@ -1,0 +1,79 @@
+# KuveytTürk – Yapay Zeka Laboratuvarı dikey kiosk · PRODUCTION stack.
+# Dev stack'ten (docker-compose.yml) tamamen AYRI — ayrı proje adı, ayrı volume.
+#
+# Çalıştırma:
+#   cp .env.prod.example .env.prod && <değerleri doldur>
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#
+# Dev'den farklar:
+#  - read-only kök dosya sistemi + tmpfs (/tmp) → çalışma-zamanı dosya yazımı
+#    yalnız /data volume'üne mümkün.
+#  - Tüm Linux capability'leri düşürülür (uygulama ayrıcalıksız 5353'ü dinler).
+#  - Bellek/CPU limitleri ve log rotasyonu → tek servis host'u tüketemez.
+#  - Dışa açılan port yalnız ${HTTP_PORT}; TLS termination önde bir LB/nginx'te.
+
+name: kuveyt-kiosk-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '20m'
+    max-file: '5'
+
+services:
+  kiosk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kuveyt-kiosk:prod
+    container_name: kuveyt-kiosk-prod
+    ports:
+      # Container ayrıcalıksız 5353 dinler; host portu buna map'lenir.
+      - '${HTTP_PORT:-80}:5353'
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '5353'
+      TZ: ${TZ:-Europe/Istanbul}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      STATE_FILE: /data/state.json
+      # Önünde kaç proxy var? Yanlış değer rate limit'i tek kovaya düşürür
+      # (tüm istemciler proxy IP'siyle sayılır) ve HSTS kararını bozar.
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      # Çapraz-origin erişim — BOŞ bırakın (yalnız same-origin). Panel farklı bir
+      # origin'den servis edilecekse buraya yazın; joker (*) DESTEKLENMEZ.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-600}
+      MUTATION_RATE_LIMIT_MAX: ${MUTATION_RATE_LIMIT_MAX:-60}
+      # https arkasındayken HSTS otomatik açılır; düz http kurulumda kapatın.
+      HSTS_ENABLED: ${HSTS_ENABLED:-true}
+    volumes:
+      - kiosk-data:/data
+    # Kök dosya sistemi salt-okunur: kod/binary değiştirilemez (persistence
+    # tekniklerinin çoğu burada durur). Uygulama yalnız /data'ya yazar.
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5353/api/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+    # Graceful shutdown (server.close + 10s force-timer) için pay bırak.
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '1.0'
+
+volumes:
+  kiosk-data:

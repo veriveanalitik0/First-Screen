@@ -1,0 +1,124 @@
+{{/*
+  Durum (ayarlar) TEK bir dosyada ve süreç belleğinde tutulur. Birden fazla
+  replika her biri kendi kopyasını servis eder; panelden yapılan değişiklik
+  ekranların yalnız birine yansır. Bu sessiz bir tutarsızlık olurdu — bu yüzden
+  yapılandırma hatası olarak KURULUMU DURDURUYORUZ.
+*/}}
+{{- if gt (int .Values.replicaCount) 1 }}
+{{- fail "kiosk: replicaCount 1 olmalı — ayarlar tek dosyada tutulur, çoklu replika durum tutarsızlığı yaratır" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kiosk.fullname" . }}
+  labels:
+    {{- include "kiosk.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # ReadWriteOnce PVC aynı anda tek pod'a bağlanır; RollingUpdate yeni pod'u
+  # eskisi ölmeden başlatmaya çalışır ve mount bekleyerek takılır.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "kiosk.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kiosk.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      # ServiceAccount token'ı bu uygulamada KULLANILMAZ; mount edilmesi
+      # container ele geçirilirse API sunucusuna yol açar.
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: kiosk
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 5353
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "5353"
+            - name: HOST
+              value: "0.0.0.0"
+            - name: NODE_ENV
+              value: "production"
+            - name: STATE_FILE
+              value: "/data/state.json"
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          # Liveness bağımlılıksızdır (yalnız süreç yaşıyor mu): ayar diski
+          # yazılamaz hale gelirse pod'u sonsuz restart döngüsüne sokmayalım.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          # Readiness ayar dizininin yazılabilirliğini kontrol eder — yazılamıyorsa
+          # panel değişiklikleri kalıcı olmaz, trafiği bu pod'a yollamayalım.
+          readinessProbe:
+            httpGet:
+              path: /api/readiness
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            # readOnlyRootFilesystem: true — Node'un yazabileceği tek geçici alan.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "kiosk.pvcName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

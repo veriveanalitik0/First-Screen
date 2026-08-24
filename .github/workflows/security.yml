@@ -1,0 +1,16 @@
+name: Security
+
+on:
+  push:
+
+permissions:
+  contents: read
+  statuses: write
+  actions: read
+
+jobs:
+  appsec:
+    # Üçüncü-taraf reusable workflow SHA'ya sabitlendi (mutable @main
+    # supply-chain riski — app_security §11). Güncellemek için:
+    #   git ls-remote https://github.com/ahmtcnn/appsec-workflows main
+    uses: ahmtcnn/appsec-workflows/.github/workflows/security-reusable.yml@c47b463a828170216d3604a12a14f13c8b1a9620

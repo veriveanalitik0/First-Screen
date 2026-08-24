@@ -1,0 +1,14 @@
+# SAST (Semgrep) kapsam dışı yollar.
+#
+# tests/: yalnız CI'da koşar, dağıtılan imaja (Dockerfile COPY listesi)
+# GİRMEZ → çalışma-zamanı attack surface değildir. Test kodu bilinçli olarak
+# path traversal / kötü origin gibi saldırı desenlerini İÇERİR; bunlar bulgu
+# değil, o saldırılara karşı regresyon korumasıdır.
+tests/
+
+# scripts/: geliştirme aracı (söz dizimi lint'i). İmaja kopyalanmaz.
+scripts/
+
+# Test çıktıları ve bağımlılıklar
+**/coverage/
+**/node_modules/

@@ -1,0 +1,35 @@
+KuveytTürk dikey kiosk kuruldu.
+
+  Sürüm : {{ .Chart.AppVersion }}
+  İmaj  : {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+  Ayar  : {{ if .Values.persistence.enabled }}kalıcı ({{ include "kiosk.pvcName" . }}){{ else }}KALICI DEĞİL (emptyDir — pod yeniden başlayınca ayarlar sıfırlanır){{ end }}
+
+Erişim:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  TV     : http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}/
+  Panel  : http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}/control
+{{- end }}
+{{- else }}
+  Port yönlendirme ile deneyin:
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kiosk.fullname" . }} 5353:{{ .Values.service.port }}
+  TV     : http://127.0.0.1:5353/
+  Panel  : http://127.0.0.1:5353/control
+{{- end }}
+
+Sağlık:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+{{- if not .Values.persistence.enabled }}
+
+UYARI: persistence.enabled=false. Panelden yapılan ayarlar pod yeniden
+başladığında kaybolur. Üretimde persistence.enabled=true kullanın.
+{{- end }}
+{{- if eq .Values.env.HSTS_ENABLED "true" }}
+{{- if not .Values.ingress.tls }}
+
+UYARI: HSTS açık ama ingress'te TLS tanımlı değil. Kurulum düz http üzerinden
+kullanılacaksa env.HSTS_ENABLED=false yapın — HSTS'i bir kez alan tarayıcı bu
+host'u bir yıl boyunca https'e çevirir ve http erişimi imkânsız hale gelir.
+{{- end }}
+{{- end }}

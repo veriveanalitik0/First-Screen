@@ -1,0 +1,29 @@
+# AppSec pipeline manifest — KuveytTürk AI Lab · Dikey Kiosk
+#
+# Bu servis TEK container'dır: harici npm bağımlılığı, veritabanı ve sır
+# gerektirmez. Dolayısıyla RESERVATION-SYSTEM'deki çok-bileşenli (postgres +
+# backend + frontend) akışın aksine tek bir compose servisi yeterlidir.
+#
+# Komutlar repo kökünden (docker-compose.yml'in yanından) çalıştırılır.
+
+language: nodejs
+dast: true
+
+components:
+  # --- Kiosk: Node.js HTTP sunucusu (statik sayfalar + ayar API'si) ---
+  #
+  # DAST hedefi olarak DEV compose servisi kullanılır ve bu BİLİNÇLİDİR:
+  # bu projede güvenlik başlıkları (CSP/nonce, XFO, nosniff, Permissions-Policy,
+  # COOP/CORP) bir reverse proxy'de DEĞİL, uygulamanın kendisinde (server.js)
+  # üretilir. Dev ve prod imajı aynı Dockerfile'dan çıkar; aradaki tek fark
+  # compose seviyesindeki sertleştirmedir (read_only, cap_drop, limitler) ve bu
+  # HTTP yanıtlarını değiştirmez. Yani taranan yanıt = dağıtılan yanıt.
+  #
+  # Prod compose ile taramak mümkün değildir: .env.prod (repoya girmeyen) dosyası
+  # ve host portu 80 gerektirir; CI runner'da ikisi de yoktur.
+  - name: kiosk
+    port: 5353
+    start: docker compose up -d --build kiosk
+    health: /api/health
+    # İmaj derleme + apk upgrade; npm install adımı YOK (sıfır bağımlılık).
+    wait_seconds: 120

@@ -1,0 +1,40 @@
+# Bağımlılıklar
+node_modules/
+
+# Ortam & sırlar (ASLA commit edilmez)
+.env
+.env.local
+.env.prod
+.env.production
+*.pem
+*.key
+secrets.json
+
+# Çalışma-zamanı durumu — kurulum başına farklıdır, repoya girmez.
+# NOT: repodaki state.json VARSAYILAN şablondur ve takip edilir; kurulumda
+# ayarlar /data/state.json'a (volume) yazılır.
+data/
+
+# Loglar
+*.log
+npm-debug.log*
+
+# Test / kapsam çıktıları
+coverage/
+.nyc_output/
+test-results/
+
+# Makine-yerel compose ezmeleri
+docker-compose.override.yml
+
+# Editör / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+*.bak
+
+# Claude Code yerel ayarları
+.claude/settings.local.json
+.claude/worktrees/

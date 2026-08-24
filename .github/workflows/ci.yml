@@ -1,0 +1,153 @@
+name: CI
+
+# Sıfır-bağımlılık Node servisi: söz dizimi lint'i, test paketi ve container
+# smoke testi. Hepsi BLOKLAYICIDIR — prod'a giden imaj bu kapıdan geçer.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test — node:test (birim + entegrasyon)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # npm ci YOK: bu serviste hiçbir npm bağımlılığı yoktur (dependencies ve
+      # devDependencies boş). Tedarik zinciri saldırı yüzeyi = 0.
+      - name: Bağımlılık olmadığını doğrula
+        run: |
+          test ! -d node_modules || { echo "node_modules beklenmiyor"; exit 1; }
+          node -e "
+            const p = require('./package.json');
+            const deps = Object.keys(p.dependencies || {}).length
+                       + Object.keys(p.devDependencies || {}).length;
+            if (deps) { console.error('Bağımlılık eklenmiş: ' + deps); process.exit(1); }
+            console.log('bağımlılık sayısı: 0');
+          "
+
+      - name: Lint (söz dizimi)
+        run: npm run lint
+
+      - name: Testler
+        run: npm test
+
+      - name: Bağımlılık CVE taraması
+        run: npm audit --omit=dev --audit-level=high
+
+  container:
+    name: Container — build + çalışma-zamanı smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # AppSec container-scan ile AYNI komut → taranan = dağıtılan imaj.
+      - name: Prod imajını derle
+        run: docker build -f Dockerfile -t local/kiosk:ci .
+
+      - name: Container'ı başlat
+        run: |
+          docker run -d --name kiosk-ci -p 5353:5353 \
+            --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            -v kiosk-ci-data:/data \
+            local/kiosk:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5353/api/readiness >/dev/null 2>&1; then
+              echo "hazır"; exit 0
+            fi
+            sleep 2
+          done
+          echo "container hazır olmadı"; docker logs kiosk-ci; exit 1
+
+      - name: Sertleştirme doğrulaması
+        run: |
+          set -e
+          # Ayrıcalıksız kullanıcı ile çalışmalı (root DEĞİL).
+          user=$(docker exec kiosk-ci id -un)
+          test "$user" = "node" || { echo "beklenen kullanıcı 'node', bulunan '$user'"; exit 1; }
+          # Prod runtime'da paket yöneticisi bulunmamalı.
+          if docker exec kiosk-ci sh -c 'command -v npm' >/dev/null 2>&1; then
+            echo "npm imajda kalmış"; exit 1
+          fi
+          # Docker HEALTHCHECK sağlıklıya dönmeli.
+          for i in $(seq 1 30); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' kiosk-ci)
+            [ "$status" = "healthy" ] && break
+            sleep 2
+          done
+          test "$status" = "healthy" || { echo "healthcheck: $status"; exit 1; }
+          echo "sertleştirme kontrolleri geçti"
+
+      - name: Uçtan uca smoke (statik + API + güvenlik başlıkları)
+        run: |
+          set -e
+          curl -fsS http://127.0.0.1:5353/ | grep -q '<script nonce="' \
+            || { echo "CSP nonce enjekte edilmemiş"; exit 1; }
+          curl -fsSI http://127.0.0.1:5353/ | grep -qi 'content-security-policy' \
+            || { echo "CSP başlığı yok"; exit 1; }
+          curl -fsS -X POST http://127.0.0.1:5353/api/state \
+            -H 'Content-Type: application/json' -d '{"secPerTurn":30}' | grep -q '"secPerTurn":30'
+          # Hassas dosyalar servis edilmemeli (path allowlist).
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5353/server.js)
+          test "$code" = "404" || { echo "server.js servis edildi ($code)"; exit 1; }
+          echo "smoke geçti"
+
+      - name: Container logları (hata teşhisi)
+        if: failure()
+        run: docker logs kiosk-ci || true
+
+      - name: Temizlik
+        if: always()
+        run: docker rm -f kiosk-ci >/dev/null 2>&1 || true
+
+  helm:
+    name: Helm — lint + render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: helm lint
+        run: helm lint helm/kiosk
+
+      - name: Render — varsayılan değerler
+        run: helm template kiosk helm/kiosk > /dev/null
+
+      - name: Render — ingress + TLS + NetworkPolicy
+        run: |
+          helm template kiosk helm/kiosk \
+            --set ingress.enabled=true \
+            --set ingress.className=nginx \
+            --set 'ingress.tls[0].secretName=kiosk-tls' \
+            --set 'ingress.tls[0].hosts[0]=kiosk.klab.example' \
+            --set networkPolicy.enabled=true > /dev/null
+
+      - name: Sertleştirme değerleri render'da korunuyor mu
+        run: |
+          set -e
+          out=$(helm template kiosk helm/kiosk)
+          echo "$out" | grep -q 'runAsNonRoot: true'          || { echo 'runAsNonRoot eksik'; exit 1; }
+          echo "$out" | grep -q 'readOnlyRootFilesystem: true' || { echo 'readOnlyRootFilesystem eksik'; exit 1; }
+          echo "$out" | grep -q 'allowPrivilegeEscalation: false' || { echo 'allowPrivilegeEscalation eksik'; exit 1; }
+          echo "$out" | grep -q 'automountServiceAccountToken: false' || { echo 'SA token mount kapalı olmalı'; exit 1; }
+          echo 'sertleştirme değerleri yerinde'
+
+      - name: replicaCount > 1 reddedilmeli (durum tutarlılığı)
+        run: |
+          if helm template kiosk helm/kiosk --set replicaCount=2 >/dev/null 2>&1; then
+            echo 'replicaCount=2 kabul edildi — reddedilmesi bekleniyordu'; exit 1
+          fi
+          echo 'beklendiği gibi reddedildi'

@@ -1,12 +1,28 @@
+# GELİŞTİRME / yerel kullanım stack'i.
+# Prod için: docker-compose.prod.yml (ayrı proje adı, sertleştirilmiş ayarlar).
+name: kuveyt-turk-kiosk
+
 services:
   kiosk:
     build: .
+    image: kuveyt-kiosk:dev
     container_name: kuveyt-turk-kiosk
     ports:
       - "5353:5353"          # TV: http://<sunucu-ip>:5353/  · Panel: /control
+    environment:
+      TZ: ${TZ:-Europe/Istanbul}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - kiosk-data:/data     # ayarlar burada kalıcı olur (yeniden başlatmada korunur)
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5353/api/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   kiosk-data:

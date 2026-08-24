@@ -1,0 +1,126 @@
+# KuveytTürk dikey kiosk — Helm değerleri.
+# Kurulum:
+#   helm upgrade --install kiosk ./helm/kiosk -n kiosk --create-namespace \
+#     --set image.repository=<registry>/kuveyt-kiosk --set image.tag=1.0.0
+
+# ---------------------------------------------------------------- imaj
+image:
+  repository: ghcr.io/veriveanalitik0/kuveyt-kiosk
+  # Boşsa Chart.appVersion kullanılır. ÜRETİMDE sürüm ya da digest sabitleyin;
+  # 'latest' kullanmayın (hangi kodun koştuğu belirsizleşir — app_security §12).
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Ayarlar TEK bir dosyada (PVC) ve süreç belleğinde tutulur; ikinci bir replika
+# kendi kopyasını servis eder ve panelden yapılan değişiklik ekranlara tutarsız
+# yansır. Bu yüzden replicaCount 1'den büyük olamaz (template 'fail' eder).
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------- uygulama yapılandırması
+env:
+  TZ: Europe/Istanbul
+  LOG_LEVEL: info
+  # Önündeki proxy sayısı (ingress controller genelde 1). Yanlış değer rate
+  # limit'i tek kovaya düşürür ya da istemcinin uydurduğu XFF'e güvendirir.
+  TRUST_PROXY_HOPS: "1"
+  # Çapraz-origin izinli adresler (virgülle). Boş = yalnız same-origin.
+  ALLOWED_ORIGINS: ""
+  # HSTS yalnız https isteklerinde gönderilir; düz http ingress'te "false" yapın.
+  HSTS_ENABLED: "true"
+  RATE_LIMIT_WINDOW_MS: "60000"
+  RATE_LIMIT_MAX: "600"
+  MUTATION_RATE_LIMIT_MAX: "60"
+
+# ---------------------------------------------------------------- servis
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: kiosk.klab.example
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: kiosk-tls
+    #   hosts: [kiosk.klab.example]
+
+# ------------------------------------------------------------- kalıcı depolama
+# Ayarlar (state.json) burada tutulur; kapalıysa emptyDir kullanılır ve pod
+# yeniden başlayınca ayarlar VARSAYILANA döner.
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 128Mi
+
+# ------------------------------------------------------------------ kaynaklar
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# -------------------------------------------------------------- sertleştirme
+# Bu değerler PodSecurity 'restricted' profiliyle uyumludur.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000        # node:22-alpine içindeki 'node' kullanıcısı
+  runAsGroup: 1000
+  fsGroup: 1000          # PVC'nin ayrıcalıksız kullanıcıya ait olması için
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  privileged: false
+  # Kök dosya sistemi salt-okunur; yazma yalnız /data (PVC) ve /tmp (emptyDir).
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Egress'i kapatan, ingress'i yalnız cluster içinden kabul eden temel politika.
+# NOT: kiosk sayfası three.js ve yazı tiplerini CDN'den çeker; bunu TARAYICI
+# yapar (pod değil), dolayısıyla pod'un dış internete çıkışına gerek yoktur.
+networkPolicy:
+  enabled: false
+  # Boş = tüm namespace'lerden ingress. Daraltmak için selector girin.
+  ingressFrom: []
+    # - namespaceSelector:
+    #     matchLabels:
+    #       kubernetes.io/metadata.name: ingress-nginx
+
+# -------------------------------------------------------------------- probe'lar
+probes:
+  liveness:
+    initialDelaySeconds: 5
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 5
+  readiness:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+terminationGracePeriodSeconds: 30

@@ -1,0 +1,24 @@
+# Build context = repo kökü. Aşağıdakiler image'e GİRMEZ.
+.git
+.github
+node_modules
+tests
+scripts
+docs
+helm
+coverage
+*.md
+!README.md
+.env
+.env.*
+!.env.prod.example
+*.pem
+*.key
+*.log
+.DS_Store
+docker-compose*.yml
+Dockerfile
+.dockerignore
+.gitignore
+.appsec.yml
+.semgrepignore

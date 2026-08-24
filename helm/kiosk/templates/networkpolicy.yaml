@@ -1,0 +1,33 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kiosk.fullname" . }}
+  labels:
+    {{- include "kiosk.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "kiosk.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # 'from' HİÇ verilmezse Kubernetes kuralı "tüm kaynaklara açık" sayar —
+    # yalnız 5353/TCP portuna. Kaynağı daraltmak için values'ta
+    # networkPolicy.ingressFrom girin (ör. ingress-controller namespace'i).
+    {{- if .Values.networkPolicy.ingressFrom }}
+    - from:
+        {{- toYaml .Values.networkPolicy.ingressFrom | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 5353
+    {{- else }}
+    - ports:
+        - protocol: TCP
+          port: 5353
+    {{- end }}
+  # Egress KAPALI: uygulama dışarı hiçbir bağlantı açmaz (three.js ve yazı
+  # tiplerini TARAYICI çeker, pod değil). DNS bile gerekmez.
+  egress: []
+{{- end }}
